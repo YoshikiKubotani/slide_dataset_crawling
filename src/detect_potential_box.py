@@ -71,7 +71,6 @@ def detection(chunk_dict, row, col, th_ratio=0.8):
         if h_level > 6:
             break_flag = True
         tab = "\t"*(h_level - 1)
-        # print("{}Start Processing for {}".format(tab, h_chunk_id))
         # chunkが背景のみの場合は、次のchunkへ
         if np.all(chunk == 255):
             continue
@@ -84,14 +83,14 @@ def detection(chunk_dict, row, col, th_ratio=0.8):
             chunk_area = chunk.shape[0] * chunk.shape[1] # 面積
             back_area = np.count_nonzero(chunk == 255) # 背景の面積
             obj_area_ratio = 1 - back_area / chunk_area # chunk全体の面積に対して、背景以外の占める割合
-            #
+            # chunkがほとんど背景の場合も次のchunkへ
             if obj_area_ratio < 0.001:
                 continue
             # chunkの縁に物体がかかっていない場合は、potential boxBに分類
             if np.all(top == 255) and np.all(bottom == 255) and np.all(right == 255) and np.all(left == 255):
                 # 4.a もっと細かく区切るべき
                 # 4.b chunkの大部分がオブジェクトを占め、オブジェクト自体はchunkを横断していないが、複数のオブジェクトを含む可能性がある
-                # print("{} - Object is NOT crossed with the chunk edge".format(tab))
+                print("{} - Object is NOT crossed with the chunk edge".format(tab))
                 if break_flag:
                     if obj_area_ratio > th_ratio:
                         box[h_chunk_id] = value_dict["bbox"]
@@ -103,19 +102,18 @@ def detection(chunk_dict, row, col, th_ratio=0.8):
             # chunkの縁に物体がかかっている場合は、potential boxAに分類
             else:
                 # chunkの大部分がオブジェクトを占め、オブジェクト自体はchunkを横断している
-                # print("{} - Object is crossed with the chunk edge".format(tab))
+                print("{} - Object is crossed with the chunk edge".format(tab))
                 if obj_area_ratio > th_ratio:
                     print("{}Processing for {}".format(tab, h_chunk_id))
                     print("{} - Object area ratio is {}; higher than threshold".format(tab, obj_area_ratio))
                     box[h_chunk_id] = value_dict["bbox"]
                 else:
                     #3.a もっと細かく区切るべき
-                    # print("{} - Object area is {}; lower than threshold".format(tab, obj_area_ratio))
+                    print("{} - Object area is {}; lower than threshold".format(tab, obj_area_ratio))
                     if break_flag:
                         continue
                     child_chunk_dict = split_chunk(chunk, curr_pos, row, col, id_prefix=h_chunk_id+"_")
                     box[h_chunk_id] = detection(child_chunk_dict, row, col, th_ratio=th_ratio*0.9)
-
     return box
 
 
