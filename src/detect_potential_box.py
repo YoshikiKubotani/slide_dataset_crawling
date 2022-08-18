@@ -9,7 +9,7 @@ from copy import deepcopy
 import statistics
 from functools import partial
 
-def ocr_img(img):
+def pytesseract_ocr_img(img):
     ocr_box_list = []
     img_h, img_w, img_c = img.shape
     d = pytesseract.image_to_data(img, config="--psm 6", output_type=pytesseract.Output.DICT)
@@ -31,19 +31,14 @@ def ocr_img(img):
                 word = re.sub(end_sym, r"\1", word)
 
             if word.lower() in english_vocab and len(word) != 1:
-                img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), -1)
+                img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
                 ocr_box_list.append(((x, y), (x + w, y + h)))
             elif word.lower() == "i" or word.lower() == "a":
-                img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), -1)
+                img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
                 ocr_box_list.append(((x, y), (x + w, y + h)))
-            # elif int(d['conf'][i]) > 60:
             else:
-                img = cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), -1)
+                img = cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 2)
                 ocr_box_list.append(((x, y), (x + w, y + h)))
-        # if d["level"][i] == 3:
-        #     (x, y, w, h) = (d['left'][i], d['top'][i], d['width'][i], d['height'][i])
-        #     img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-    cv2.imwrite("ocr_image.png", img)
     return img, ocr_box_list
 
 def split_chunk(img, top_pos, rows, cols, id_prefix=""):
@@ -152,7 +147,7 @@ img_BGR[-2:, :] = 255 # 下辺
 img_BGR[:, 0:2] = 255 # 右辺
 img_BGR[:, -2:] = 255 # 左辺
 
-ocr_BGR_img, ocr_box_list = ocr_img(deepcopy(img_BGR))
+ocr_BGR_img, ocr_box_list = pytesseract_ocr_img(deepcopy(img_BGR))
 
 gray_img = cv2.cvtColor(img_BGR, cv2.COLOR_BGR2GRAY)
 inv_gray_img = cv2.bitwise_not(gray_img)
