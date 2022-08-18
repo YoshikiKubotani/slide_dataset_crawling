@@ -117,9 +117,12 @@ def detection(chunk_dict, row, col, th_ratio=0.8):
     return box
 
 
-nltk.download('words')
-nltk.download('reuters')
-nltk.download('brown')
+data_folder = os.path.join(os.getcwd(), "data/raw")
+
+# これをターミナルから先に実行しておくこと
+# nltk.download('words')
+# nltk.download('reuters')
+# nltk.download('brown')
 
 english_vocab_words = set(w.lower() for w in nltk.corpus.words.words())
 english_vocab_reuters = set(w.lower() for w in nltk.corpus.reuters.words())
@@ -131,109 +134,125 @@ both_sym = re.compile("(\W{1})([a-zA-Z]*)(\W{1})")
 init_sym = re.compile("(\W{1})([a-zA-Z]*)")
 end_sym = re.compile("([a-zA-Z]*)(\W{1})")
 
-img_BGR = cv2.imread("/content/page009.png")
 
-img_height = img_BGR.shape[0]
-img_width = img_BGR.shape[1]
-print("({}, {})".format(img_height, img_width))
-row_split = 2
-col_split = 3
+for dirpath, dirnames, filenames in os.walk(data_folder):
+    last_dir = dirpath.split("/")[-1]
+    if last_dir == "img":
+        conference, year, paper_id, last_dir = dirpath.split("/")[-4:]
+        box_json_save_folder = os.path.join(os.getcwd(), "data/potential_box_annotation", conference, year, paper_id, "box_json")
+        box_vis_save_folder = os.path.join(os.getcwd(), "data/potential_box_annotation", conference, year, paper_id, "visualization")
+        os.makedirs(box_json_save_folder, exist_ok=True)
+        os.makedirs(box_vis_save_folder, exist_ok=True)
 
-# スライドの縁の数ピクセルは強制的に白とする
-img_BGR[0:2, :] = 255 # 上辺
-img_BGR[-2:, :] = 255 # 下辺
-img_BGR[:, 0:2] = 255 # 右辺
-img_BGR[:, -2:] = 255 # 左辺
-
-ocr_BGR_img, ocr_box_list = pytesseract_ocr_img(deepcopy(img_BGR))
-
-gray_img = cv2.cvtColor(img_BGR, cv2.COLOR_BGR2GRAY)
-inv_gray_img = cv2.bitwise_not(gray_img)
-th_inv_gray_img = cv2.threshold(inv_gray_img, 10, 255, cv2.THRESH_TOZERO)[1]
-th_gray_img = cv2.bitwise_not(th_inv_gray_img)
-
-chunk_dict = split_chunk(th_gray_img, (0,0), row_split, col_split)
-box_dict = detection(chunk_dict, row_split, col_split, th_ratio=0.9)
-
-bbox_pos_list = []
-
-for h_1, h_1_dict in box_dict.items():
-    if isinstance(h_1_dict, dict):
-        for h_2, h_2_dict in h_1_dict.items():
-            if isinstance(h_2_dict, dict):
-                for h_3, h_3_dict in h_2_dict.items():
-                    if isinstance(h_3_dict, dict):
-                        for h_4, h_4_dict in h_3_dict.items():
-                            if isinstance(h_4_dict, dict):
-                                for h_5, h_5_dict in h_4_dict.items():
-                                    if isinstance(h_5_dict, dict):
-                                        for h_6, h_6_dict in h_5_dict.items():
-                                            if isinstance(h_6_dict, dict):
-                                                if len(h_6_dict) == 0:
-                                                    print("empty")
-                                                    continue
-                                                for val in h_6_dict.values():
-                                                    bbox_pos_list.append(val)
-                                            else:
-                                                bbox_pos_list.append(h_6_dict)
-                                    else:
-                                        bbox_pos_list.append(h_5_dict)
-                            else:
-                                bbox_pos_list.append(h_4_dict)
-                    else:
-                        bbox_pos_list.append(h_3_dict)
-            else:
-                bbox_pos_list.append(h_2_dict)
-    else:
-        bbox_pos_list.append(h_1_dict)
+        print("Start processing {}".format(paper_id))
+        for filename in filenames:
+            slide_id = int(filename.split(".")[0][-3:])
+            print("\tProcess the {}/{} slide image.".format(slide_id, len(filenames)))
+            slide_img_path = os.path.join(dirpath, filename)
 
 
-result_img = deepcopy(img_BGR)
-for pos in bbox_pos_list:
-    result_img = cv2.rectangle(result_img, pos[0], pos[1], (0, 255, 0), thickness=-1)
+            img_BGR = cv2.imread(slide_img_path)
 
-re_ocr_box_list = []
-for ocr_box in ocr_box_list:
-    x1, y1 = ocr_box[0]
-    x2, y2 = ocr_box[1]
-    ocr_area_result_img = result_img[y1:y2, x1:x2, :]
-    print("({}, {}) - ({}, {})".format(x1,y1,x2,y2))
-    print(ocr_area_result_img.shape)
-    is_green_area = np.logical_and.reduce((
-        ocr_area_result_img[:, :, 0] == 0,
-        ocr_area_result_img[:, :, 1] == 255,
-        ocr_area_result_img[:, :, 2] == 0
-    ))
-    green_pixel_count = np.count_nonzero(ocr_area_result_img[is_green_area])
-    all_pixel_count = ocr_area_result_img.shape[0] * ocr_area_result_img.shape[1]
-    green_area_ratio = green_pixel_count/all_pixel_count
-    if green_area_ratio > 0.4:
-        re_ocr_box_list.append(ocr_box)
+            img_height = img_BGR.shape[0]
+            img_width = img_BGR.shape[1]
+            print("\t({}, {})".format(img_height, img_width))
+            row_split = 2
+            col_split = 3
 
-# ocr_result_image = deepcopy(img_BGR)
-# for pos in re_ocr_box_list:
-#     ocr_result_image = cv2.rectangle(ocr_result_image, pos[0], pos[1], (0, 255, 0), -1)
-#     result_img = cv2.rectangle(result_img, pos[0], pos[1], (0, 255, 0), -1)
+            # スライドの縁の数ピクセルは強制的に白とする
+            img_BGR[0:2, :] = 255 # 上辺
+            img_BGR[-2:, :] = 255 # 下辺
+            img_BGR[:, 0:2] = 255 # 右辺
+            img_BGR[:, -2:] = 255 # 左辺
 
-grayed_result = cv2.cvtColor(deepcopy(result_img), cv2.COLOR_BGR2GRAY)
-_, bin_result = cv2.threshold(grayed_result, 150, 255, cv2.THRESH_BINARY)
-bin_result = cv2.bitwise_not(bin_result)
+            ocr_BGR_img, ocr_box_list = pytesseract_ocr_img(deepcopy(img_BGR))
 
-# cnt_result = deepcopy(img_BGR)
-box_result = deepcopy(img_BGR)
-# 輪郭取得
-contours, _ = cv2.findContours(bin_result, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            gray_img = cv2.cvtColor(img_BGR, cv2.COLOR_BGR2GRAY)
+            inv_gray_img = cv2.bitwise_not(gray_img)
+            th_inv_gray_img = cv2.threshold(inv_gray_img, 10, 255, cv2.THRESH_TOZERO)[1]
+            th_gray_img = cv2.bitwise_not(th_inv_gray_img)
 
-contours2 = list(filter(lambda x: cv2.contourArea(x) >= 25, contours))
+            chunk_dict = split_chunk(th_gray_img, (0,0), row_split, col_split)
+            box_dict = detection(chunk_dict, row_split, col_split, th_ratio=0.9)
 
-# for i, cnt in enumerate(contours2):
-#     cv2.drawContours(cnt_result, contours, -1, (0, 255, 0), 2)
+            bbox_pos_list = []
 
-for i, cnt in enumerate(contours2):
-    rect = cv2.minAreaRect(cnt)
-    box = cv2.boxPoints(rect)
-    box = np.int0(box)
-    box
-    cv2.drawContours(box_result,[box],0,(0,0,255),2)
+            for h_1, h_1_dict in box_dict.items():
+                if isinstance(h_1_dict, dict):
+                    for h_2, h_2_dict in h_1_dict.items():
+                        if isinstance(h_2_dict, dict):
+                            for h_3, h_3_dict in h_2_dict.items():
+                                if isinstance(h_3_dict, dict):
+                                    for h_4, h_4_dict in h_3_dict.items():
+                                        if isinstance(h_4_dict, dict):
+                                            for h_5, h_5_dict in h_4_dict.items():
+                                                if isinstance(h_5_dict, dict):
+                                                    for h_6, h_6_dict in h_5_dict.items():
+                                                        if isinstance(h_6_dict, dict):
+                                                            if len(h_6_dict) == 0:
+                                                                # print("empty")
+                                                                continue
+                                                            for val in h_6_dict.values():
+                                                                bbox_pos_list.append(val)
+                                                        else:
+                                                            bbox_pos_list.append(h_6_dict)
+                                                else:
+                                                    bbox_pos_list.append(h_5_dict)
+                                        else:
+                                            bbox_pos_list.append(h_4_dict)
+                                else:
+                                    bbox_pos_list.append(h_3_dict)
+                        else:
+                            bbox_pos_list.append(h_2_dict)
+                else:
+                    bbox_pos_list.append(h_1_dict)
 
-cv2.imwrite('box_result.png', box_result)
+
+            result_img = deepcopy(img_BGR)
+            for pos in bbox_pos_list:
+                result_img = cv2.rectangle(result_img, pos[0], pos[1], (0, 255, 0), thickness=-1)
+
+            re_ocr_box_list = []
+            for ocr_box in ocr_box_list:
+                x1, y1 = ocr_box[0]
+                x2, y2 = ocr_box[1]
+                ocr_area_result_img = result_img[y1:y2, x1:x2, :]
+                # print("({}, {}) - ({}, {})".format(x1,y1,x2,y2))
+                # print(ocr_area_result_img.shape)
+                is_green_area = np.logical_and.reduce((
+                    ocr_area_result_img[:, :, 0] == 0,
+                    ocr_area_result_img[:, :, 1] == 255,
+                    ocr_area_result_img[:, :, 2] == 0
+                ))
+                green_pixel_count = np.count_nonzero(ocr_area_result_img[is_green_area])
+                all_pixel_count = ocr_area_result_img.shape[0] * ocr_area_result_img.shape[1]
+                green_area_ratio = green_pixel_count/all_pixel_count
+                if green_area_ratio > 0.4:
+                    re_ocr_box_list.append(ocr_box)
+
+            # ocr_result_image = deepcopy(img_BGR)
+            # for pos in re_ocr_box_list:
+            #     ocr_result_image = cv2.rectangle(ocr_result_image, pos[0], pos[1], (0, 255, 0), -1)
+            #     result_img = cv2.rectangle(result_img, pos[0], pos[1], (0, 255, 0), -1)
+
+            grayed_result = cv2.cvtColor(deepcopy(result_img), cv2.COLOR_BGR2GRAY)
+            _, bin_result = cv2.threshold(grayed_result, 150, 255, cv2.THRESH_BINARY)
+            bin_result = cv2.bitwise_not(bin_result)
+
+            # cnt_result = deepcopy(img_BGR)
+            box_result = deepcopy(img_BGR)
+            # 輪郭取得
+            contours, _ = cv2.findContours(bin_result, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            contours2 = list(filter(lambda x: cv2.contourArea(x) >= 25, contours))
+
+            # for i, cnt in enumerate(contours2):
+            #     cv2.drawContours(cnt_result, contours, -1, (0, 255, 0), 2)
+
+            for i, cnt in enumerate(contours2):
+                rect = cv2.minAreaRect(cnt)
+                box = cv2.boxPoints(rect)
+                box = np.int0(box)
+                cv2.drawContours(box_result,[box],0,(0,0,255),2)
+
+            cv2.imwrite(os.path.join(box_vis_save_folder, "pbox_res_page{:03d}.png".format(slide_id)), box_result)
