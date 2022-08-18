@@ -1,0 +1,17 @@
+# file extentions
+__pycache__
+*.python-version
+*.vscode
+*.ipynb_checkpoints
+*.DS_Store
+*.lock
+*.toml
+*.env
+*.zip
+*.png
+
+# local directories
+/apps/*
+!/apps/.gitkeep
+/data/*
+!/data/.gitkeep
