@@ -1,0 +1,10 @@
+stages:
+  potential_box_detection:
+    cmd: python3.8 src/detect_potential_box.py
+    params:
+    - potential_box_detection
+    deps:
+    - data/raw
+    - src/detect_potential_box.py
+    outs:
+    - data/potential_box_detection

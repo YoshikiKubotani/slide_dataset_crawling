@@ -1,0 +1,6 @@
+potential_box_detection:
+  ocr_conf: 20
+  is_obj_th: 0.9
+  is_skip_th: 0.001
+  detected_area_per_ocr_area_th: 0.15
+  is_contour_th: 25
