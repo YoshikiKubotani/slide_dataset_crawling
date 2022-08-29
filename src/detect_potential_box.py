@@ -238,10 +238,8 @@ for dirpath, dirnames, filenames in os.walk(data_folder):
                 if green_area_ratio > detected_area_per_ocr_area_th:
                     re_ocr_box_list.append(ocr_box)
 
-            # ocr_result_image = deepcopy(img_BGR)
-            # for pos in re_ocr_box_list:
-            #     ocr_result_image = cv2.rectangle(ocr_result_image, pos[0], pos[1], (0, 255, 0), -1)
-            #     result_img = cv2.rectangle(result_img, pos[0], pos[1], (0, 255, 0), -1)
+            for pos in re_ocr_box_list:
+                result_img = cv2.rectangle(result_img, pos[0], pos[1], (0, 255, 0), -1)
 
             grayed_result = cv2.cvtColor(deepcopy(result_img), cv2.COLOR_BGR2GRAY)
             _, bin_result = cv2.threshold(grayed_result, 150, 255, cv2.THRESH_BINARY)
