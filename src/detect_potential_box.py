@@ -1,13 +1,21 @@
 import os
 import cv2
+import json
 import pytesseract
 import matplotlib.pyplot as plt
 import nltk
 import re
+import dvc.api
 import numpy as np
 from copy import deepcopy
-import statistics
 from functools import partial
+
+params = dvc.api.params_show()
+ocr_conf = params["potential_box_detection"]["ocr_conf"]
+is_obj_th = params["potential_box_detection"]["is_obj_th"]
+is_skip_th = params["potential_box_detection"]["is_skip_th"]
+detected_area_per_ocr_area_th = params["potential_box_detection"]["detected_area_per_ocr_area_th"]
+is_contour_th = params["potential_box_detection"]["is_contour_th"]
 
 def pytesseract_ocr_img(img):
     ocr_box_list = []
@@ -15,19 +23,19 @@ def pytesseract_ocr_img(img):
     d = pytesseract.image_to_data(img, config="--psm 6", output_type=pytesseract.Output.DICT)
     n_boxes = len(d['text'])
     for i in range(n_boxes):
-        if int(d['conf'][i]) > 20 and d["level"][i] == 5:
+        if int(d['conf'][i]) > ocr_conf and d["level"][i] == 5:
             (x, y, w, h) = (d['left'][i], d['top'][i], d['width'][i], d['height'][i])
             if w > img_w/2 and h > img_h/2:
                 continue
             word = d["text"][i]
             if both_sym.match(word):
-                print("{} is matched with both_sym".format(word))
+                # print("{} is matched with both_sym".format(word))
                 word = re.sub(both_sym, r"\2", word)
             elif init_sym.match(word):
-                print("{} is matched with init_sym".format(word))
+                # print("{} is matched with init_sym".format(word))
                 word = re.sub(init_sym, r"\2", word)
             elif end_sym.match(word):
-                print("{} is matched with end_sym".format(word))
+                # print("{} is matched with end_sym".format(word))
                 word = re.sub(end_sym, r"\1", word)
 
             if word.lower() in english_vocab and len(word) != 1:
@@ -84,32 +92,32 @@ def detection(chunk_dict, row, col, th_ratio=0.8):
             back_area = np.count_nonzero(chunk == 255) # 背景の面積
             obj_area_ratio = 1 - back_area / chunk_area # chunk全体の面積に対して、背景以外の占める割合
             # chunkがほとんど背景の場合も次のchunkへ
-            if obj_area_ratio < 0.001:
+            if obj_area_ratio < is_skip_th:
                 continue
             # chunkの縁に物体がかかっていない場合は、potential boxBに分類
             if np.all(top == 255) and np.all(bottom == 255) and np.all(right == 255) and np.all(left == 255):
                 # 4.a もっと細かく区切るべき
                 # 4.b chunkの大部分がオブジェクトを占め、オブジェクト自体はchunkを横断していないが、複数のオブジェクトを含む可能性がある
-                print("{} - Object is NOT crossed with the chunk edge".format(tab))
+                # print("{} - Object is NOT crossed with the chunk edge".format(tab))
                 if break_flag:
                     if obj_area_ratio > th_ratio:
                         box[h_chunk_id] = value_dict["bbox"]
-                        print("{}Processing for {}".format(tab, h_chunk_id))
-                        print("{} - Stopped but chunk stored".format(tab, obj_area_ratio))
+                        # print("{}Processing for {}".format(tab, h_chunk_id))
+                        # print("{} - Stopped but chunk stored".format(tab, obj_area_ratio))
                     continue
                 child_chunk_dict = split_chunk(chunk, curr_pos, row, col, id_prefix=h_chunk_id+"_")
                 box[h_chunk_id] = detection(child_chunk_dict, row, col, th_ratio=th_ratio*0.9)
             # chunkの縁に物体がかかっている場合は、potential boxAに分類
             else:
                 # chunkの大部分がオブジェクトを占め、オブジェクト自体はchunkを横断している
-                print("{} - Object is crossed with the chunk edge".format(tab))
+                # print("{} - Object is crossed with the chunk edge".format(tab))
                 if obj_area_ratio > th_ratio:
-                    print("{}Processing for {}".format(tab, h_chunk_id))
-                    print("{} - Object area ratio is {}; higher than threshold".format(tab, obj_area_ratio))
+                    # print("{}Processing for {}".format(tab, h_chunk_id))
+                    # print("{} - Object area ratio is {}; higher than threshold".format(tab, obj_area_ratio))
                     box[h_chunk_id] = value_dict["bbox"]
                 else:
                     #3.a もっと細かく区切るべき
-                    print("{} - Object area is {}; lower than threshold".format(tab, obj_area_ratio))
+                    # print("{} - Object area is {}; lower than threshold".format(tab, obj_area_ratio))
                     if break_flag:
                         continue
                     child_chunk_dict = split_chunk(chunk, curr_pos, row, col, id_prefix=h_chunk_id+"_")
@@ -130,9 +138,9 @@ english_vocab_brown = set(w.lower() for w in nltk.corpus.brown.words())
 
 english_vocab = english_vocab_words| english_vocab_reuters | english_vocab_brown
 
-both_sym = re.compile("(\W{1})([a-zA-Z]*)(\W{1})")
-init_sym = re.compile("(\W{1})([a-zA-Z]*)")
-end_sym = re.compile("([a-zA-Z]*)(\W{1})")
+both_sym = re.compile("^(\W{1})([a-zA-Z]*)(\W{1})$")
+init_sym = re.compile("^(\W{1})([a-zA-Z]*)")
+end_sym = re.compile("([a-zA-Z]*)(\W{1})$")
 
 
 for dirpath, dirnames, filenames in os.walk(data_folder):
@@ -173,7 +181,7 @@ for dirpath, dirnames, filenames in os.walk(data_folder):
             th_gray_img = cv2.bitwise_not(th_inv_gray_img)
 
             chunk_dict = split_chunk(th_gray_img, (0,0), row_split, col_split)
-            box_dict = detection(chunk_dict, row_split, col_split, th_ratio=0.9)
+            box_dict = detection(chunk_dict, row_split, col_split, th_ratio=is_obj_th)
 
             bbox_pos_list = []
 
@@ -227,7 +235,7 @@ for dirpath, dirnames, filenames in os.walk(data_folder):
                 green_pixel_count = np.count_nonzero(ocr_area_result_img[is_green_area])
                 all_pixel_count = ocr_area_result_img.shape[0] * ocr_area_result_img.shape[1]
                 green_area_ratio = green_pixel_count/all_pixel_count
-                if green_area_ratio > 0.4:
+                if green_area_ratio > detected_area_per_ocr_area_th:
                     re_ocr_box_list.append(ocr_box)
 
             # ocr_result_image = deepcopy(img_BGR)
@@ -244,15 +252,25 @@ for dirpath, dirnames, filenames in os.walk(data_folder):
             # 輪郭取得
             contours, _ = cv2.findContours(bin_result, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-            contours2 = list(filter(lambda x: cv2.contourArea(x) >= 25, contours))
+            contours2 = list(filter(lambda x: cv2.contourArea(x) >= is_contour_th, contours))
 
             # for i, cnt in enumerate(contours2):
             #     cv2.drawContours(cnt_result, contours, -1, (0, 255, 0), 2)
 
+            box_dict = {}
             for i, cnt in enumerate(contours2):
                 rect = cv2.minAreaRect(cnt)
                 box = cv2.boxPoints(rect)
                 box = np.int0(box)
+                box_dict["top-left"] = box[0].tolist()
+                box_dict["top-right"] = box[1].tolist()
+                box_dict["bottom-right"] = box[2].tolist()
+                box_dict["bottom-left"] = box[3].tolist()
                 cv2.drawContours(box_result,[box],0,(0,0,255),2)
 
-            cv2.imwrite(os.path.join(box_vis_save_folder, "pbox_res_page{:03d}.png".format(slide_id)), box_result)
+            box_json_save_path = os.path.join(box_json_save_folder, "pbox_res_page{:03d}.json".format(slide_id))
+            with open(box_json_save_path, "w") as f:
+                json.dump(box_dict, f, indent=4)
+
+            box_vis_save_path = os.path.join(box_vis_save_folder, "pbox_res_page{:03d}.png".format(slide_id))
+            cv2.imwrite(box_vis_save_path, box_result)
