@@ -4,9 +4,6 @@ __pycache__
 *.vscode
 *.ipynb_checkpoints
 *.DS_Store
-*.lock
-*.toml
-*.env
 *.zip
 *.png
 
@@ -15,3 +12,4 @@ __pycache__
 !/apps/.gitkeep
 /data/*
 !/data/.gitkeep
+!/data/*.dvc
