@@ -147,8 +147,8 @@ for dirpath, dirnames, filenames in os.walk(data_folder):
     last_dir = dirpath.split("/")[-1]
     if last_dir == "img":
         conference, year, paper_id, last_dir = dirpath.split("/")[-4:]
-        box_json_save_folder = os.path.join(os.getcwd(), "data/potential_box_annotation", conference, year, paper_id, "box_json")
-        box_vis_save_folder = os.path.join(os.getcwd(), "data/potential_box_annotation", conference, year, paper_id, "visualization")
+        box_json_save_folder = os.path.join(os.getcwd(), "data/potential_box_detection", conference, year, paper_id, "box_json")
+        box_vis_save_folder = os.path.join(os.getcwd(), "data/potential_box_detection", conference, year, paper_id, "visualization")
         os.makedirs(box_json_save_folder, exist_ok=True)
         os.makedirs(box_vis_save_folder, exist_ok=True)
 
