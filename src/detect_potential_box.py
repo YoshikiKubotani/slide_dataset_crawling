@@ -18,7 +18,7 @@ detected_area_per_ocr_area_th = params["potential_box_detection"]["detected_area
 is_contour_th = params["potential_box_detection"]["is_contour_th"]
 
 def pytesseract_ocr_img(img):
-    ocr_box_dict = []
+    ocr_box_dict = {}
     img_h, img_w, img_c = img.shape
     d = pytesseract.image_to_data(img, config="--psm 6", output_type=pytesseract.Output.DICT)
     n_boxes = len(d['text'])
@@ -257,9 +257,10 @@ for dirpath, dirnames, filenames in os.walk(data_folder):
                     if last_elem is None:
                         last_elem = curr_elem
                         continue
-                    margin = curr_elem["top_left"][0] - last_elem["bottom_right"][0]
+                    x_margin = abs(curr_elem["top_left"][0] - last_elem["bottom_right"][0])
+                    diff_bottom_line = abs(curr_elem["bottom_right"][1] - last_elem["bottom_right"][1])
                     height_diff_ratio = abs(curr_elem["height"] - last_elem["height"]) / min([curr_elem["height"], last_elem["height"]])
-                    if margin < 20 and height_diff_ratio < 1:
+                    if x_margin < 20 and diff_bottom_line < 20 and height_diff_ratio < 1:
                         redef_text = " ".join([last_elem["detected_word"], curr_elem["detected_word"]])
                         redef_top_left = last_elem["top_left"]
                         redef_bottom_right = curr_elem["bottom_right"]
@@ -274,7 +275,8 @@ for dirpath, dirnames, filenames in os.walk(data_folder):
                     else:
                         re_ocr_box_dict[line_num].append(last_elem)
                         last_elem = curr_elem
-                re_ocr_box_dict[line_num].append(last_elem)
+                if last_elem is not None:
+                    re_ocr_box_dict[line_num].append(last_elem)
 
             for elem_list_for_each_line in re_ocr_box_dict.values():
                 for elem_dict in elem_list_for_each_line:
