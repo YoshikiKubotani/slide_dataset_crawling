@@ -18,13 +18,17 @@ detected_area_per_ocr_area_th = params["potential_box_detection"]["detected_area
 is_contour_th = params["potential_box_detection"]["is_contour_th"]
 
 def pytesseract_ocr_img(img):
-    ocr_box_list = []
+    ocr_box_dict = []
     img_h, img_w, img_c = img.shape
     d = pytesseract.image_to_data(img, config="--psm 6", output_type=pytesseract.Output.DICT)
     n_boxes = len(d['text'])
     for i in range(n_boxes):
         if int(d['conf'][i]) > ocr_conf and d["level"][i] == 5:
             (x, y, w, h) = (d['left'][i], d['top'][i], d['width'][i], d['height'][i])
+            line_num = d["line_num"][i]
+            text = d["text"][i]
+            if line_num not in ocr_box_dict:
+                ocr_box_dict[line_num] = []
             if w > img_w/2 and h > img_h/2:
                 continue
             word = d["text"][i]
@@ -40,14 +44,14 @@ def pytesseract_ocr_img(img):
 
             if word.lower() in english_vocab and len(word) != 1:
                 img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                ocr_box_list.append(((x, y), (x + w, y + h)))
+                ocr_box_dict[line_num].append((text, (x, y), (x + w, y + h)))
             elif word.lower() == "i" or word.lower() == "a":
                 img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                ocr_box_list.append(((x, y), (x + w, y + h)))
+                ocr_box_dict[line_num].append((text, (x, y), (x + w, y + h)))
             else:
                 img = cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 2)
-                ocr_box_list.append(((x, y), (x + w, y + h)))
-    return img, ocr_box_list
+                ocr_box_dict[line_num].append((text, (x, y), (x + w, y + h)))
+    return img, ocr_box_dict
 
 def split_chunk(img, top_pos, rows, cols, id_prefix=""):
     chunk_dict = {}
@@ -173,7 +177,7 @@ for dirpath, dirnames, filenames in os.walk(data_folder):
             img_BGR[:, 0:2] = 255 # 右辺
             img_BGR[:, -2:] = 255 # 左辺
 
-            ocr_BGR_img, ocr_box_list = pytesseract_ocr_img(deepcopy(img_BGR))
+            ocr_BGR_img, ocr_box_dict = pytesseract_ocr_img(deepcopy(img_BGR))
 
             gray_img = cv2.cvtColor(img_BGR, cv2.COLOR_BGR2GRAY)
             inv_gray_img = cv2.bitwise_not(gray_img)
@@ -220,26 +224,63 @@ for dirpath, dirnames, filenames in os.walk(data_folder):
             for pos in bbox_pos_list:
                 result_img = cv2.rectangle(result_img, pos[0], pos[1], (0, 255, 0), thickness=-1)
 
-            re_ocr_box_list = []
-            for ocr_box in ocr_box_list:
-                x1, y1 = ocr_box[0]
-                x2, y2 = ocr_box[1]
-                ocr_area_result_img = result_img[y1:y2, x1:x2, :]
-                # print("({}, {}) - ({}, {})".format(x1,y1,x2,y2))
-                # print(ocr_area_result_img.shape)
-                is_green_area = np.logical_and.reduce((
-                    ocr_area_result_img[:, :, 0] == 0,
-                    ocr_area_result_img[:, :, 1] == 255,
-                    ocr_area_result_img[:, :, 2] == 0
-                ))
-                green_pixel_count = np.count_nonzero(ocr_area_result_img[is_green_area])
-                all_pixel_count = ocr_area_result_img.shape[0] * ocr_area_result_img.shape[1]
-                green_area_ratio = green_pixel_count/all_pixel_count
-                if green_area_ratio > detected_area_per_ocr_area_th:
-                    re_ocr_box_list.append(ocr_box)
+            re_ocr_box_dict = {}
+            for line_num, ocr_box_list in ocr_box_dict.items():
+                re_ocr_box_dict[line_num] = []
+                refined_ocr_box_list = []
+                for each_ocr_box in ocr_box_list:
+                    text = each_ocr_box[0]
+                    x1, y1 = each_ocr_box[1]
+                    x2, y2 = each_ocr_box[2]
+                    ocr_area_result_img = result_img[y1:y2, x1:x2, :]
+                    # print("({}, {}) - ({}, {})".format(x1,y1,x2,y2))
+                    # print(ocr_area_result_img.shape)
+                    is_green_area = np.logical_and.reduce((
+                        ocr_area_result_img[:, :, 0] == 0,
+                        ocr_area_result_img[:, :, 1] == 255,
+                        ocr_area_result_img[:, :, 2] == 0
+                    ))
+                    green_pixel_count = np.count_nonzero(ocr_area_result_img[is_green_area])
+                    all_pixel_count = ocr_area_result_img.shape[0] * ocr_area_result_img.shape[1]
+                    green_area_ratio = green_pixel_count/all_pixel_count
+                    if green_area_ratio > detected_area_per_ocr_area_th:
+                        refined_ocr_box_list.append(
+                            {
+                                "detected_word": text,
+                                "top_left": (x1,y1),
+                                "bottom_right": (x2,y2),
+                                "height": y2-y1,
+                            }
+                        )
+                last_elem = None
+                for curr_elem in refined_ocr_box_list:
+                    if last_elem is None:
+                        last_elem = curr_elem
+                        continue
+                    margin = curr_elem["top_left"][0] - last_elem["bottom_right"][0]
+                    height_diff_ratio = abs(curr_elem["height"] - last_elem["height"]) / min([curr_elem["height"], last_elem["height"]])
+                    if margin < 20 and height_diff_ratio < 1:
+                        redef_text = " ".join([last_elem["detected_word"], curr_elem["detected_word"]])
+                        redef_top_left = last_elem["top_left"]
+                        redef_bottom_right = curr_elem["bottom_right"]
+                        redef_height = max([curr_elem["height"], last_elem["height"]])
+                        new_curr_elem = {
+                            "detected_word": redef_text,
+                            "top_left": redef_top_left,
+                            "bottom_right": redef_bottom_right,
+                            "height": redef_height,
+                        }
+                        last_elem = new_curr_elem
+                    else:
+                        re_ocr_box_dict[line_num].append(last_elem)
+                        last_elem = curr_elem
+                re_ocr_box_dict[line_num].append(last_elem)
 
-            for pos in re_ocr_box_list:
-                result_img = cv2.rectangle(result_img, pos[0], pos[1], (0, 255, 0), -1)
+            for elem_list_for_each_line in re_ocr_box_dict.values():
+                for elem_dict in elem_list_for_each_line:
+                    top_left = elem_dict["top_left"]
+                    bottom_right = elem_dict["bottom_right"]
+                    result_img = cv2.rectangle(result_img, top_left, bottom_right, (0, 255, 0), -1)
 
             grayed_result = cv2.cvtColor(deepcopy(result_img), cv2.COLOR_BGR2GRAY)
             _, bin_result = cv2.threshold(grayed_result, 150, 255, cv2.THRESH_BINARY)
