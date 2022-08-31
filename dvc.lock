@@ -1,0 +1,25 @@
+schema: '2.0'
+stages:
+  potential_box_detection:
+    cmd: python3.8 src/detect_potential_box.py
+    deps:
+    - path: data/raw
+      md5: 15944da12290439422f718679646ffed.dir
+      size: 1788446912
+      nfiles: 29755
+    - path: src/detect_potential_box.py
+      md5: 6998f1ebbeb3dfff1d837d1373dec1c4
+      size: 15952
+    params:
+      params.yaml:
+        potential_box_detection:
+          ocr_conf: 20
+          is_obj_th: 0.9
+          is_skip_th: 0.001
+          detected_area_per_ocr_area_th: 0.4
+          is_contour_th: 25
+    outs:
+    - path: data/potential_box_detection
+      md5: ec2bfd0d7d02f82e0838496b2a946780.dir
+      size: 4105336118
+      nfiles: 57714
