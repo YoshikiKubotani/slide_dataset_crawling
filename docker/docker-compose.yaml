@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  core:
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    build:
+      args:
+        - BASE_IMAGE=nvidia/cuda:11.1.1-cudnn8-devel-ubuntu18.04
+        - PYTHON_VERSION=3.8
+      context: ../
+      dockerfile: docker/core.Dockerfile
+    tty: true
+    volumes:
+        - ../:/home/admin/slide_generation
+    ports:
+        - 8000:8000
+  annotation:
+    environment:
+        - DISPLAY=${DISPLAY}
+    build:
+      args:
+        - PYTHON_VERSION=3.8
+        - UID=${HOST_UID-1000}
+        - GID=${HOST_GID-1000}
+      context: ../
+      dockerfile: docker/annt.Dockerfile
+    tty: true
+    volumes:
+        - ../data:/home/workdir
+        - /tmp/.X11-unix:/tmp/.X11-unix
