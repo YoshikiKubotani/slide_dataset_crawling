@@ -10,6 +10,8 @@ import numpy as np
 from copy import deepcopy
 from functools import partial
 
+from utils import annotation_in_labelme_format
+
 params = dvc.api.params_show()
 ocr_conf = params["potential_box_detection"]["ocr_conf"]
 is_obj_th = params["potential_box_detection"]["is_obj_th"]
@@ -151,8 +153,8 @@ for dirpath, dirnames, filenames in os.walk(data_folder):
     last_dir = dirpath.split("/")[-1]
     if last_dir == "img":
         conference, year, paper_id, last_dir = dirpath.split("/")[-4:]
-        box_json_save_folder = os.path.join(os.getcwd(), "data/potential_box_detection", conference, year, paper_id, "box_json")
-        box_vis_save_folder = os.path.join(os.getcwd(), "data/potential_box_detection", conference, year, paper_id, "visualization")
+        box_json_save_folder = os.path.join(os.getcwd(), "data/potential_box_detection/box_json", conference, year, paper_id)
+        box_vis_save_folder = os.path.join(os.getcwd(), "data/potential_box_detection/visualization", conference, year, paper_id)
         os.makedirs(box_json_save_folder, exist_ok=True)
         os.makedirs(box_vis_save_folder, exist_ok=True)
 
@@ -298,20 +300,36 @@ for dirpath, dirnames, filenames in os.walk(data_folder):
             # for i, cnt in enumerate(contours2):
             #     cv2.drawContours(cnt_result, contours, -1, (0, 255, 0), 2)
 
-            box_dict = {}
+            # box_dict = {}
+            box_list = []
             for i, cnt in enumerate(contours2):
-                rect = cv2.minAreaRect(cnt)
-                box = cv2.boxPoints(rect)
-                box = np.int0(box)
-                box_dict["top-left"] = box[0].tolist()
-                box_dict["top-right"] = box[1].tolist()
-                box_dict["bottom-right"] = box[2].tolist()
-                box_dict["bottom-left"] = box[3].tolist()
-                cv2.drawContours(box_result,[box],0,(0,0,255),2)
+                # rect = cv2.minAreaRect(cnt)
+                # box = cv2.boxPoints(rect)
+                # box = np.int0(box)
+                # box_dict["top-left"] = box[0].tolist()
+                # box_dict["top-right"] = box[1].tolist()
+                # box_dict["bottom-right"] = box[2].tolist()
+                # box_dict["bottom-left"] = box[3].tolist()
+                # cv2.drawContours(box_result,[box],0,(0,0,255),2)
+                x,y,w,h = cv2.boundingRect(cnt)
+                box_list.append(
+                    {
+                        "x": x,
+                        "y": y,
+                        "width": w,
+                        "height": h
+                    }
+                )
+                cv2.rectangle(box_result, (x,y), (x+w,y+h), (0,255,0), 2)
+            start = box_json_save_folder
+            path = slide_img_path
+            labelme_annot_dict = annotation_in_labelme_format(os.path.relpath(path, start), box_list)
 
-            box_json_save_path = os.path.join(box_json_save_folder, "pbox_res_page{:03d}.json".format(slide_id))
+            # box_json_save_path = os.path.join(box_json_save_folder, "pbox_res_page{:03d}.json".format(slide_id))
+            box_json_save_path = os.path.join(box_json_save_folder, "{}.json".format(filename.split(".")[0]))
             with open(box_json_save_path, "w") as f:
-                json.dump(box_dict, f, indent=4)
+                # json.dump(box_dict, f, indent=4)
+                json.dump(labelme_annot_dict, f, indent=4)
 
             box_vis_save_path = os.path.join(box_vis_save_folder, "pbox_res_page{:03d}.png".format(slide_id))
             cv2.imwrite(box_vis_save_path, box_result)
